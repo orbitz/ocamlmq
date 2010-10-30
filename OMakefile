@@ -15,24 +15,16 @@ OCAMLPACKS[] =
     extlib
     unix
     str
-    pgocaml
-    pgocaml.syntax
     camlp4.macro
 
 OBJECTS[] =
     extSet
     mq_types
     mq_stomp
-    pGOCaml_lwt
-    mq_pg_persistence
+    mq_hashtable_persistence
     mq_server
     ternary
     ocamlmq
-
-mq_schema.ml: schema.sql generate_prepared_statements.rb
-        ruby generate_prepared_statements.rb create_db $< > $@
-
-.SCANNER: scan-ocaml-mq_pg_persistence.ml: mq_pg_persistence.ml mq_schema.ml
 
 OCamlProgram(ocamlmq, $(OBJECTS))
 
