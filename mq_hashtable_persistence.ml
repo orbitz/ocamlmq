@@ -1,3 +1,4 @@
+open Printf
 open Mq_types
 open Lwt
 
@@ -19,7 +20,7 @@ let query tbl f =
   Hashtbl.fold (fun k v accum -> if f k v then v::accum else accum) tbl []
 
 let get_msg tbl msg_id =
-  (List.hd (query tbl (fun k _ -> k == msg_id))).msg
+  (Hashtbl.find tbl msg_id).msg
 
 let get_ack_pending_msg' tbl msg_id =
   query tbl (fun k v -> k == msg_id && v.ack_pending)
@@ -31,6 +32,7 @@ let create debug = { tbl = Hashtbl.create 100
 let initialize q = return ()
 
 let save_msg q ?(low_priority = false) msg = 
+  eprintf "Saving message: %s\n" msg.msg_id;
   match msg.msg_destination with
     | Topic _ | Control _ -> return ()
     | Queue queue ->
@@ -59,7 +61,7 @@ let ack_msg q msg_id =
 let unack_msg q msg_id = 
   return (do_save q.tbl ~ack_pending:false (get_msg q.tbl msg_id))
 
-let get_msg_for_delivery q queue = 
+let get_msg_for_delivery q queue =
   match List.map (fun m -> m.msg) 
     (query q.tbl 
        (fun k v -> v.msg.msg_destination = Queue queue && v.ack_pending = false)) with
