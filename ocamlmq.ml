@@ -38,12 +38,9 @@ let () =
     Lwt_unix.run begin
       let msg_store = Mq_hashtable_persistence.create !debug
       in
-        if !debug then eprintf "Connected to database.\n%!";
-        (if !initdb then begin
-           eprintf "Initializing database.\n%!";
-           Mq_hashtable_persistence.initialize msg_store
-         end else return ()) >>
+      Mq_hashtable_persistence.initialize msg_store
+      >>
         lwt broker = SERVER.make_broker
-                       ?login:!login ?passcode:!passcode msg_store addr
-        in SERVER.server_loop ~debug:!debug broker
-    end
+          ?login:!login ?passcode:!passcode msg_store addr
+		   in SERVER.server_loop ~debug:!debug broker
+ end
