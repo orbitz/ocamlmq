@@ -32,7 +32,6 @@ let create debug = { tbl = Hashtbl.create 100
 let initialize q = return ()
 
 let save_msg q ?(low_priority = false) msg = 
-  eprintf "Saving message: %s\n" msg.msg_id;
   match msg.msg_destination with
     | Topic _ | Control _ -> return ()
     | Queue queue ->
