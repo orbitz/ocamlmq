@@ -23,7 +23,7 @@ let get_msg tbl msg_id =
   (Hashtbl.find tbl msg_id).msg
 
 let get_ack_pending_msg' tbl msg_id =
-  query tbl (fun k v -> k == msg_id && v.ack_pending)
+  query tbl (fun k v -> k == msg_id && not v.ack_pending)
 
 let create debug = { tbl = Hashtbl.create 100
 		   ; debug = debug
