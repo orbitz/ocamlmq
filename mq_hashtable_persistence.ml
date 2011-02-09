@@ -45,7 +45,7 @@ let register_ack_pending_msg q msg_id =
   match get_ack_pending_msg' q.tbl msg_id with
     | [] -> return false
     | xs -> begin
-      List.iter (fun m -> do_save q.tbl ~ack_pending:false m.msg) xs;
+      List.iter (fun m -> do_save q.tbl ~ack_pending:true m.msg) xs;
       return true
     end
 
