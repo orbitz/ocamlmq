@@ -28,9 +28,8 @@ let get_header frame name = List.assoc (String.lowercase name) frame.fr_headers
 
 let get_body frame = frame.fr_body
 
-let stomp_frame_buf = Buffer.create 80
-
 let write_stomp_frame ~eol och frame =
+  let stomp_frame_buf = Buffer.create 80 in
   let b = stomp_frame_buf in
     Buffer.clear b;
     Buffer.add_string b frame.fr_command;
