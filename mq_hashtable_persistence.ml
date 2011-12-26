@@ -76,4 +76,11 @@ let count_queue_msgs q queue =
 	       (query q.tbl 
 		  (fun k v -> v.msg.msg_destination = Queue queue && v.ack_pending = false))))
 
+let all_messages q =
+  return (Hashtbl.fold
+	    (fun _ v accum ->
+	      (v.msg, v.ack_pending)::accum)
+	    q.tbl
+	    [])
+
 let crash_recovery q = return ()

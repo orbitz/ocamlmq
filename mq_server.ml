@@ -17,6 +17,7 @@ sig
   val unack_msg : t -> string -> unit Lwt.t
   val get_msg_for_delivery : t -> string -> Mq_types.message option Lwt.t
   val count_queue_msgs : t -> string -> Int64.t Lwt.t
+  val all_messages : t -> (Mq_types.message * bool) list Lwt.t
   val crash_recovery : t -> unit Lwt.t
 end
 
@@ -366,10 +367,37 @@ let cmd_disconnect broker conn frame =
   DEBUG(show "Disconnect by %d." conn.conn_id);
   Lwt_io.abort conn.conn_och >> fail End_of_file
 
+let dump_messages fname messages =
+  let string_of_destination = function
+    | Queue queue -> "/queue/" ^ queue
+    | Topic topic -> "/topic/" ^ topic
+    | Control control -> "/control/" ^ control
+  in
+  let string_of_ack_pending = function
+    | true -> "true"
+    | false -> "false"
+  in
+  let string_of_body body =
+    body
+  in
+  let fout = open_out fname in
+  List.iter
+    (fun (msg, ack_pending) ->
+      fprintf 
+	fout 
+	"%s\t%s\t%s\n"
+	(string_of_destination msg.msg_destination)
+	(string_of_ack_pending ack_pending)
+	(string_of_body msg.msg_body))
+    messages;
+  close_out fout
+
 let handle_control_message broker dst conn frame =
+  DEBUG(show "Control Handling %S." dst);
   if Str.string_match (Str.regexp "count-msgs/queue/") dst 0 then
     let queue = String.slice ~first:17 dst in
     lwt num_msgs = P.count_queue_msgs broker.b_msg_store queue in
+      DEBUG(show "Returning %S" (Int64.to_string num_msgs));
       return ["num-messages", Int64.to_string num_msgs]
   else if Str.string_match (Str.regexp "count-subscribers/queue/") dst 0 then
     let queue = String.slice ~first:24 dst in
@@ -383,6 +411,12 @@ let handle_control_message broker dst conn frame =
     let topic = String.slice ~first:24 dst in
     let num_subs = CONNS.cardinal (matching_conns broker topic) in
       return ["num-subscribers", string_of_int num_subs]
+  else if dst = "all-messages" then begin
+    DEBUG(show "All message %S" frame.STOMP.fr_body);
+    lwt all_messages = P.all_messages broker.b_msg_store in
+    dump_messages frame.STOMP.fr_body all_messages;
+    return ["all-messages", frame.STOMP.fr_body]
+  end
   else
     return []
 
