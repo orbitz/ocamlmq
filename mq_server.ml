@@ -417,6 +417,18 @@ let handle_control_message broker dst conn frame =
     dump_messages frame.STOMP.fr_body all_messages;
     return ["all-messages", frame.STOMP.fr_body]
   end
+  else if dst = "gc-information" then begin
+    DEBUG(show "GC information %S" frame.STOMP.fr_body);
+    let fout = open_out frame.STOMP.fr_body in
+    Gc.print_stat fout;
+    close_out fout;
+    return []
+  end
+  else if dst = "gc-verbose" then begin
+    DEBUG(show "GC verbosity %S" frame.STOMP.fr_body);
+    Gc.set { Gc.get () with Gc.verbose = int_of_string frame.STOMP.fr_body };
+    return []
+  end
   else
     return []
 
