@@ -75,7 +75,7 @@ type broker = {
   b_frame_eol : bool;
   b_msg_store : P.t;
   b_force_async : bool;
-  b_debug : bool;
+  mutable b_debug : bool;
   b_async_maxmem : int;
   mutable b_async_usedmem : int;
   b_login : string option;
@@ -367,7 +367,7 @@ let cmd_disconnect broker conn frame =
   DEBUG(show "Disconnect by %d." conn.conn_id);
   Lwt_io.abort conn.conn_och >> fail End_of_file
 
-let dump_messages fname messages =
+let dump_messages fout messages =
   let string_of_destination = function
     | Queue queue -> "/queue/" ^ queue
     | Topic topic -> "/topic/" ^ topic
@@ -380,7 +380,6 @@ let dump_messages fname messages =
   let string_of_body body =
     body
   in
-  let fout = open_out fname in
   List.iter
     (fun (msg, ack_pending) ->
       fprintf 
@@ -389,8 +388,33 @@ let dump_messages fname messages =
 	(string_of_destination msg.msg_destination)
 	(string_of_ack_pending ack_pending)
 	(string_of_body msg.msg_body))
-    messages;
-  close_out fout
+    messages
+
+
+let dump_report broker fout =
+  Printf.fprintf fout "- Messages\n";
+  lwt all_messages = P.all_messages broker.b_msg_store in
+  dump_messages fout all_messages;
+  Printf.fprintf fout "- GC Info\n";
+  Gc.print_stat fout;
+  Printf.fprintf fout "- Num connections = %d\n" (CONNS.cardinal broker.b_connections);
+  Printf.fprintf fout "- Num queues = %d\n" (H.length broker.b_queues);
+  H.iter
+    (fun queue listeners ->
+      Printf.fprintf fout "-- Queue: %s Ready: %d Blocked: %d\n"
+	queue 
+	(SUBS.cardinal listeners.l_ready)
+	(SUBS.cardinal listeners.l_blocked))
+    broker.b_queues;
+  Printf.fprintf fout "- Num topics - %d\n" (H.length broker.b_topics);
+  H.iter
+    (fun topic conns ->
+      Printf.fprintf fout "-- Topic: %s Num Conns: %d\n"
+	topic
+	(CONNS.cardinal conns))
+    broker.b_topics;
+  close_out fout;
+  return ()
 
 let handle_control_message broker dst conn frame =
   DEBUG(show "Control Handling %S." dst);
@@ -414,7 +438,9 @@ let handle_control_message broker dst conn frame =
   else if dst = "all-messages" then begin
     DEBUG(show "All message %S" frame.STOMP.fr_body);
     lwt all_messages = P.all_messages broker.b_msg_store in
-    dump_messages frame.STOMP.fr_body all_messages;
+    let fout = open_out frame.STOMP.fr_body in
+    dump_messages fout all_messages;
+    close_out fout;
     return ["all-messages", frame.STOMP.fr_body]
   end
   else if dst = "gc-information" then begin
@@ -427,6 +453,17 @@ let handle_control_message broker dst conn frame =
   else if dst = "gc-verbose" then begin
     DEBUG(show "GC verbosity %S" frame.STOMP.fr_body);
     Gc.set { Gc.get () with Gc.verbose = int_of_string frame.STOMP.fr_body };
+    return []
+  end
+  else if dst = "toggle-debug" then begin
+    broker.b_debug <- not (broker.b_debug);
+    return []
+  end
+  else if dst = "dump-report" then begin
+    DEBUG(show "Dumping report %S" frame.STOMP.fr_body);
+    let fout = open_out frame.STOMP.fr_body in
+    lwt () = dump_report broker fout in
+    close_out fout;
     return []
   end
   else
