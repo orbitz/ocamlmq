@@ -207,31 +207,34 @@ let rec send_to_recipient ~kind broker listeners conn subs queue msg =
     (* if kind is Saved, the msg is believed not to be in the ACK-pending set;
      * if it actually is, this means it was already sent to some other conn,
      * so we don't try to send it again *)
-    lwt must_send = (match kind with
-         Ack_pending -> (* the message was already in ACK-pending set *) return true
-       | Saved -> (* just move to ACK *)
-           P.register_ack_pending_msg broker.b_msg_store msg_id) in
-    if not must_send then return () else
-
-    STOMP.send_message ~eol:broker.b_frame_eol conn.conn_och msg >>
-    begin try_lwt
-      match msg.msg_ack_timeout with
-        dt when dt > 0. -> Lwt_unix.with_timeout dt (fun () -> sleep)
-      | _ -> sleep
-    finally
-      (* either ACKed or Timeout/Cancel, at any rate, no longer want the ACK *)
-      H.remove conn.conn_pending_acks msg_id;
-      subs.qs_pending_acks <- subs.qs_pending_acks - 1;
-      return ()
-    end >>
-    begin
-      DEBUG(show "Conn %d ACKed %S." conn.conn_id msg_id);
-      P.ack_msg broker.b_msg_store msg_id >>
+    lwt must_send = 
+      (match kind with
+          Ack_pending -> (* the message was already in ACK-pending set *) return true
+	| Saved -> (* just move to ACK *)
+          P.register_ack_pending_msg broker.b_msg_store msg_id) 
+    in
+    if not must_send then 
+      return () 
+    else
+      STOMP.send_message ~eol:broker.b_frame_eol conn.conn_och msg >>
+	begin try_lwt
+	    match msg.msg_ack_timeout with
+		dt when dt > 0. -> Lwt_unix.with_timeout dt (fun () -> sleep)
+	      | _ -> sleep
+	    finally
+	      (* either ACKed or Timeout/Cancel, at any rate, no longer want the ACK *)
+	      H.remove conn.conn_pending_acks msg_id;
+		subs.qs_pending_acks <- subs.qs_pending_acks - 1;
+		return ()
+	end >>
+	begin
+	  DEBUG(show "Conn %d ACKed %S." conn.conn_id msg_id);
+	  P.ack_msg broker.b_msg_store msg_id >>
       (* try to send older messages for the subscription whose message
        * we just ACKed *)
-      (ignore_result (send_saved_messages broker) queue;
-       return ())
-    end
+	    (ignore_result (send_saved_messages broker) queue;
+	     return ())
+	end
 
 and send_saved_messages ?(only_once = false) broker queue =
   if not (have_recipient broker queue) then return () else
@@ -453,6 +456,16 @@ let handle_control_message broker dst conn frame =
   else if dst = "gc-verbose" then begin
     DEBUG(show "GC verbosity %S" frame.STOMP.fr_body);
     Gc.set { Gc.get () with Gc.verbose = int_of_string frame.STOMP.fr_body };
+    return []
+  end
+  else if dst = "gc-max-overhead" then begin
+    DEBUG(show "GC max-overhead %S" frame.STOMP.fr_body);
+    Gc.set { Gc.get () with Gc.max_overhead = int_of_string frame.STOMP.fr_body };
+    return []
+  end
+  else if dst = "gc-space-overhead" then begin
+    DEBUG(show "GC space-overhead %S" frame.STOMP.fr_body);
+    Gc.set { Gc.get () with Gc.space_overhead = int_of_string frame.STOMP.fr_body };
     return []
   end
   else if dst = "toggle-debug" then begin
