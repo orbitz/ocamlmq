@@ -95,6 +95,7 @@ let is_prefix_topic topic =
 let remove_topic_subs broker topic conn =
   try
     if not (is_prefix_topic topic) then begin
+      H.remove conn.conn_topics topic;
       let conns = H.find broker.b_topics topic in
         match CONNS.remove conn conns with
             s when CONNS.is_empty s -> H.remove broker.b_topics topic
